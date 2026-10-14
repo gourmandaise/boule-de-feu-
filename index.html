@@ -1,0 +1,1504 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#09080f">
+<title>Boule de feu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+<style>
+/* Plein écran : plateau 3D au centre, scores et tour en haut, deux manettes tactiles en bas (P1 à gauche, P2 à droite). Style gothique : échiquier de pierre sombre bordé d'ogives dorées, ciel nocturne, titre en lettres gothiques. */
+:root{
+  --night:#09080f;
+  --dusk:#16101f;
+  --ember:#2a0e1b;
+  --gold:#c9a24a;
+  --bone:#e9e0c9;
+  --p1:#cf3346;
+  --p2:#4f8cff;
+  --fg:#e9e0c9;
+  --muted:#9a95ad;
+  --panel:rgba(12,10,18,.82);
+  --card:#14111b;
+  --display:'Cinzel','Trajan Pro',Georgia,serif;
+  --black:'UnifrakturMaguntia','Old English Text MT',Georgia,serif;
+  --body:'Cinzel','Trajan Pro',Georgia,serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--night);color:var(--fg);font-family:var(--body);overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;touch-action:none}
+#app{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;
+  background:radial-gradient(70% 38% at 50% 6%,rgba(170,160,215,.22),rgba(170,160,215,0) 70%),linear-gradient(180deg,var(--night) 0%,var(--dusk) 55%,var(--ember) 100%)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+.hud{position:absolute;left:0;right:0;top:0;padding:14px 16px 0;display:flex;flex-direction:column;gap:10px;pointer-events:none;z-index:2}
+.scores{display:flex;justify-content:space-between;gap:12px}
+.pill{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--panel);border:2px solid transparent;font-family:var(--display);font-size:19px;letter-spacing:.02em;transition:border-color .2s,background .2s,transform .2s,box-shadow .2s}
+.pill[data-side="azur"]{--c:var(--p1)}
+.pill[data-side="citron"]{--c:var(--p2)}
+.pill.on{background:var(--c);color:#10131f;border-color:#fff;transform:scale(1.1);box-shadow:0 0 0 4px rgba(255,255,255,.18),0 0 22px var(--c)}
+.pill.on .dot{background:#10131f}
+.pill b{font-weight:400;min-width:1ch;font-variant-numeric:tabular-nums}
+.status{background:var(--panel);border:1px solid rgba(201,162,74,.3);border-radius:4px;padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px}
+#status-text{font-weight:600;font-size:13px;letter-spacing:.04em;line-height:1.3;min-height:1.3em}
+.timer{height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+.timer i{display:block;height:100%;width:100%;transform-origin:left center;transform:scaleX(0)}
+
+.zone{position:absolute;bottom:0;width:50%;height:30%;z-index:3;touch-action:none}
+#zone-a{left:0;--c:var(--p1)}
+#zone-c{right:0;--c:var(--p2)}
+.zone .hintring{position:absolute;left:50%;bottom:54px;width:92px;height:92px;margin-left:-46px;border-radius:50%;border:2px dashed var(--c);opacity:.4;pointer-events:none}
+.zone .label{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-family:var(--display);font-size:16px;letter-spacing:.04em;color:var(--c);opacity:.5;pointer-events:none}
+.zone.active .hintring{display:none}
+.zone.turn .label{opacity:1;text-shadow:0 0 14px var(--c)}
+.zone.turn:not(.active) .hintring{opacity:.95;border-style:solid}
+.stick{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;border-radius:50%;border:2px solid var(--c);background:rgba(255,255,255,.07);display:none;pointer-events:none}
+.stick.on{display:block}
+.stick i{position:absolute;left:50%;top:50%;width:48px;height:48px;border-radius:50%;background:var(--c);transform:translate(-50%,-50%);box-shadow:0 4px 14px rgba(0,0,0,.45)}
+
+.overlay{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(7,6,12,.66)}
+.card{width:min(100%,360px);max-height:100%;overflow:auto;background:var(--card);border:1px solid rgba(201,162,74,.4);border-radius:6px;padding:22px 20px;display:flex;flex-direction:column;gap:14px}
+.card h1{margin:0;font-family:var(--black);font-weight:400;font-size:40px;line-height:1.1;text-wrap:balance;color:var(--bone)}
+.card .lead{margin:0;font-size:16px;line-height:1.4;color:var(--muted);font-weight:600}
+.rules{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.rules li{font-size:15px;line-height:1.4;font-weight:600}
+.rules b{display:block;font-family:var(--display);font-weight:400;font-size:18px;letter-spacing:.03em;color:var(--gold)}
+.n-a{color:var(--p1)}
+.n-c{color:var(--p2)}
+.board{font-family:var(--display);display:flex;flex-direction:column;gap:14px}
+.board .row{display:flex;align-items:center;gap:16px}
+.board small{font-size:20px;letter-spacing:.06em;min-width:2.2ch}
+.tally{display:inline-flex;align-items:center;flex-wrap:wrap;gap:10px;min-height:24px}
+.tally .grp{display:inline-flex;gap:6px}
+.tally i{display:block;width:3px;height:22px;border-radius:2px;background:var(--bone);transform:rotate(24deg)}
+.pill .tally{min-height:22px}
+.pill .tally i{height:18px}
+button.go{font-family:var(--display);font-size:17px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;border:0;border-radius:3px;padding:14px 18px;background:var(--gold);color:#1a1208;cursor:pointer}
+button.go:active{transform:translateY(1px)}
+.replay{display:flex;gap:10px}
+.replay .go{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:12px 8px}
+.replay .go span{font-size:12px;letter-spacing:.14em}
+.go-a{background:var(--p1)}
+.go-c{background:var(--p2)}
+.go.ready{opacity:.55}
+#app.intro .hud,#app.intro .zone{visibility:hidden}
+.card.intro{background:none;border:0;padding:0;align-items:center;text-align:center;cursor:pointer}
+.card.intro h1{font-size:clamp(44px,13vw,72px);text-shadow:0 3px 26px rgba(180,30,50,.55)}
+#app.intro .overlay{background:radial-gradient(70% 38% at 50% 8%,rgba(170,160,215,.2),rgba(170,160,215,0) 70%),linear-gradient(180deg,#07060c 0%,#150f1f 55%,#2a0e1b 100%)}
+button:focus-visible{outline:3px solid var(--bone);outline-offset:2px}
+
+@media (orientation:landscape){
+  .zone{width:30%;height:100%}
+  .zone .hintring{bottom:22%}
+  .zone .label{bottom:8%}
+  .hud{left:30%;right:30%;padding:8px 8px 0;gap:6px}
+  .pill{padding:5px 11px;font-size:16px}
+  .status{padding:6px 10px 8px;gap:5px}
+  #status-text{font-size:13px}
+}
+
+/* en ligne : une seule manette (la mienne), pastilles de score jusqu'à 4 joueurs, menus */
+.pill .nm{color:var(--c);max-width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scores.many{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.scores.many .pill{padding:5px 10px;font-size:14px;gap:6px;min-width:0}
+.scores.many .pill .tally{gap:6px;min-height:16px}
+.scores.many .pill .tally i{height:14px}
+.online #zone-c{display:none}
+.online #zone-a{width:100%}
+.online #zone-a .label{opacity:.8}
+input{-webkit-user-select:text;user-select:text;touch-action:manipulation}
+.field{width:100%;font:600 17px var(--body);color:var(--fg);background:#0c0a12;border:1px solid rgba(201,162,74,.4);border-radius:3px;padding:12px;letter-spacing:.06em}
+.field::placeholder{color:#6d687f}
+.row2{display:flex;gap:8px}
+button.ghost{font-family:var(--display);font-size:14px;font-weight:600;letter-spacing:.1em;background:none;border:1px solid rgba(201,162,74,.45);color:var(--bone);border-radius:3px;padding:12px 14px;cursor:pointer}
+button:disabled{opacity:.4}
+.err{margin:0;min-height:1.2em;font-size:14px;line-height:1.3;color:#e07a86;font-weight:600}
+.code{font-family:var(--display);font-size:44px;letter-spacing:.3em;text-align:center;color:var(--gold);margin:0;padding-left:.3em}
+.plist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.plist li{font-weight:600;font-size:17px;color:var(--c)}
+.card.menu h1{font-size:44px;text-align:center}
+.board small{min-width:7ch;max-width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board .row{gap:12px}
+.rb{font-style:normal;font-size:12px;letter-spacing:.12em;color:var(--muted);margin-left:auto}
+.card .go.ready{opacity:.55}
+@media (orientation:landscape){
+  .online #zone-a{width:34%}
+  .online .hud{left:34%;right:2%}
+}
+@media (prefers-reduced-motion:reduce){.pill{transition:none}}
+</style>
+
+<style>@supports (height:100dvh){html,body,#app{height:100dvh}}</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl"></canvas>
+
+  <div class="hud"><div class="scores" id="scores"></div></div>
+
+  <div class="zone" id="zone-a">
+    <div class="hintring"></div>
+    <div class="label" id="label-a">P1</div>
+    <div class="stick"><i></i></div>
+  </div>
+  <div class="zone" id="zone-c">
+    <div class="hintring"></div>
+    <div class="label" id="label-c">P2</div>
+    <div class="stick"><i></i></div>
+  </div>
+
+  <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var R = 12, RB = 12;                          // rayon du plateau
+  var PAWN_SCALE = 1.3;
+  var ROOK_SCALE = 1.4;
+  var PAWN_R = 0.45 * PAWN_SCALE, BALL_R = 0.46 * ROOK_SCALE;
+  var HIT_DIST = PAWN_R + BALL_R;
+  var PLAYER_SPEED = 5.4;
+  var BALL_BASE = 3, BALL_GROWTH = 1.1;
+  var TURN_TIME = 8;
+  var MAXP = 4;                                 // 2 à 4 joueurs
+  var NAMES = ['P1', 'P2', 'P3', 'P4'];
+  var COLORS = [0x8f1727, 0x2559c4, 0x23814a, 0x7b4bbd];
+
+  var app = document.getElementById('app');
+  var canvas = document.getElementById('gl');
+  var overlay = document.getElementById('overlay');
+  var card = document.getElementById('card');
+  var zones = [document.getElementById('zone-a'), document.getElementById('zone-c')];
+
+  /* ---------- état du jeu ---------- */
+  var state = 'intro';                 // intro | aim | fly | over
+  var turn = 0, launches = 0, timer = TURN_TIME, round = 0;
+  var score = [0, 0, 0, 0];
+  var pendingOver = -1, loserIdx = -1, hitAt = 0;
+  var note = '', noteT = 0;
+  var shake = 0, time = 0, acc = 0;
+  var aim = { id: null, x: 0, z: 0 };
+  var sticks = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+  var keys = {};
+
+  /* ---------- rendu ---------- */
+  var renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+  } catch (err) {
+    card.innerHTML = '<h1>3D indisponible</h1><p class="lead">Ce navigateur ne peut pas afficher la 3D (WebGL). Essayez Safari ou Chrome à jour.</p>';
+    return;
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(42, 1, 1, 160);
+  var camBase = new THREE.Vector3(0, 20, 12);
+  var lookV = new THREE.Vector3(0, -0.2, 0);
+
+  scene.add(new THREE.AmbientLight(0x9a96b8, 0.85));
+  var sun = new THREE.DirectionalLight(0xe8e4ff, 0.75);
+  sun.position.set(-6, 14, 8);
+  scene.add(sun);
+
+  function makeGlowTexture() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 64;
+    var g = c.getContext('2d');
+    var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  function makeShadowTexture() {
+    var c = document.createElement('canvas');
+    c.width = c.height = 64;
+    var g = c.getContext('2d');
+    var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(0,0,0,0.6)');
+    gr.addColorStop(0.6, 'rgba(0,0,0,0.25)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  function makeBoardTexture() {
+    var s = 1024, n = 14, q = s / n;
+    var c = document.createElement('canvas');
+    c.width = c.height = s;
+    var g = c.getContext('2d');
+    function rnd() { return Math.random(); }
+    for (var r = 0; r < n; r++) {
+      for (var k = 0; k < n; k++) {
+        var light = (r + k) % 2 === 0;
+        var v = Math.round((rnd() - 0.5) * 12);
+        var base = light ? [112 + v, 110 + v, 122 + v] : [27 + v, 26 + v, 33 + v];
+        var x0 = k * q, y0 = r * q;
+        g.fillStyle = 'rgb(' + base[0] + ',' + base[1] + ',' + base[2] + ')';
+        g.fillRect(x0, y0, q + 1, q + 1);
+        g.save();
+        g.beginPath(); g.rect(x0, y0, q, q); g.clip();
+        // nuages de teinte
+        for (var j = 0; j < 4; j++) {
+          var cx = x0 + rnd() * q, cy = y0 + rnd() * q, cr = q * (0.4 + rnd() * 0.6);
+          var gr = g.createRadialGradient(cx, cy, 0, cx, cy, cr);
+          gr.addColorStop(0, light ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)');
+          gr.addColorStop(1, 'rgba(255,255,255,0)');
+          g.fillStyle = gr;
+          g.fillRect(x0, y0, q, q);
+        }
+        // veines du marbre
+        for (var i = 0; i < 3; i++) {
+          g.strokeStyle = 'rgba(255,255,255,' + ((light ? 0.12 : 0.07) + rnd() * 0.1) + ')';
+          g.lineWidth = 0.6 + rnd() * 1.6;
+          var sx = x0 + rnd() * q, sy = y0 + rnd() * q;
+          g.beginPath();
+          g.moveTo(sx, sy);
+          g.bezierCurveTo(sx + (rnd() - 0.5) * q, sy + (rnd() - 0.5) * q, sx + (rnd() - 0.5) * q * 1.5, sy + (rnd() - 0.5) * q * 1.5, sx + (rnd() - 0.5) * q * 2, sy + (rnd() - 0.5) * q * 2);
+          g.stroke();
+        }
+        // grain fin
+        for (var d = 0; d < 50; d++) {
+          g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,' + (rnd() * 0.06) + ')' : 'rgba(0,0,0,' + (rnd() * 0.12) + ')';
+          g.fillRect(x0 + rnd() * q, y0 + rnd() * q, 1.5, 1.5);
+        }
+        g.restore();
+      }
+    }
+    // joints fins entre les cases
+    g.strokeStyle = 'rgba(0,0,0,0.5)';
+    g.lineWidth = 2;
+    for (var l = 0; l <= n; l++) {
+      g.beginPath(); g.moveTo(l * q, 0); g.lineTo(l * q, s); g.stroke();
+      g.beginPath(); g.moveTo(0, l * q); g.lineTo(s, l * q); g.stroke();
+    }
+    var t = new THREE.CanvasTexture(c);
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    return t;
+  }
+
+  var glowTex = makeGlowTexture();
+  var shadowTex = makeShadowTexture();
+
+  // plateau
+  var boardMats = [
+    new THREE.MeshStandardMaterial({ color: 0x0f0d14, roughness: 1 }),
+    new THREE.MeshStandardMaterial({ map: makeBoardTexture(), roughness: 0.36, metalness: 0.08, transparent: false, opacity: 1 }),
+    new THREE.MeshStandardMaterial({ color: 0x0b0a10, roughness: 1 })
+  ];
+  var board = new THREE.Mesh(new THREE.CylinderGeometry(RB, RB * 0.96, 0.8, 72), boardMats);
+  board.position.y = -0.4;
+  scene.add(board);
+
+  var rock = new THREE.Mesh(
+    new THREE.CylinderGeometry(RB * 0.96, 0.1, 7, 9, 1),
+    new THREE.MeshStandardMaterial({ color: 0x15131c, roughness: 1, flatShading: true })
+  );
+  rock.position.y = -4.3;
+  scene.add(rock);
+
+  var shadowGeo = new THREE.CircleGeometry(1, 24);
+  shadowGeo.rotateX(-Math.PI / 2);
+  var shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
+  function makeShadow(scale) {
+    var s = new THREE.Mesh(shadowGeo, shadowMat);
+    s.scale.set(scale, scale, scale);
+    s.position.y = 0.02;
+    scene.add(s);
+    return s;
+  }
+
+  // pions d'échecs
+  function profile(pts) {
+    return pts.map(function (v) { return new THREE.Vector2(v[0], v[1]); });
+  }
+  var pawnBodyGeo = new THREE.LatheGeometry(profile([[0, 0], [0.45, 0], [0.45, 0.1], [0.38, 0.16], [0.24, 0.3], [0.17, 0.55], [0.2, 0.68], [0.34, 0.72], [0.34, 0.8], [0.2, 0.84], [0, 0.84]]), 28);
+  var pawnHeadGeo = new THREE.SphereGeometry(0.26, 20, 16);
+  function makePawn(idx) {
+    var mat = new THREE.MeshStandardMaterial({ color: COLORS[idx], roughness: 0.38, metalness: 0.05, side: THREE.DoubleSide });
+    var group = new THREE.Group();
+    var pivot = new THREE.Group();
+    pivot.position.y = 0.65;
+    var body = new THREE.Mesh(pawnBodyGeo, mat);
+    body.position.y = -0.65;
+    var head = new THREE.Mesh(pawnHeadGeo, mat);
+    head.position.y = 1.02 - 0.65;
+    pivot.add(body);
+    pivot.add(head);
+    group.add(pivot);
+    scene.add(group);
+    return {
+      id: idx, group: group, mat: mat, shadow: makeShadow(0.75),
+      x: 0, z: 0, vx: 0, vz: 0, ry: idx === 0 ? Math.PI : 0, bob: 0,
+      dead: false, hitT: 0, pivot: pivot, y: 0, vy: 0, wx: 0, wy: 0, wz: 0
+    };
+  }
+  var pawns = [makePawn(0), makePawn(1), makePawn(2), makePawn(3)];
+
+  // boule de feu
+  var ball = { x: 0, z: 0, tx: 0, tz: 0, speed: BALL_BASE, moving: false };
+  var rookMat = new THREE.MeshStandardMaterial({ color: 0xefe6d0, roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide });
+  var ballMesh = new THREE.Group();
+  ballMesh.add(new THREE.Mesh(new THREE.LatheGeometry(profile([[0, 0], [0.46, 0], [0.46, 0.12], [0.38, 0.2], [0.3, 0.36], [0.3, 1.1], [0.4, 1.18], [0.4, 1.4], [0, 1.4]]), 28), rookMat));
+  var merlonGeo = new THREE.BoxGeometry(0.18, 0.28, 0.3);
+  for (var mi = 0; mi < 4; mi++) {
+    var ma = mi * Math.PI / 2;
+    var merlon = new THREE.Mesh(merlonGeo, rookMat);
+    merlon.position.set(Math.cos(ma) * 0.3, 1.53, Math.sin(ma) * 0.3);
+    merlon.rotation.y = -ma;
+    ballMesh.add(merlon);
+  }
+  ballMesh.scale.set(ROOK_SCALE, ROOK_SCALE, ROOK_SCALE);
+  scene.add(ballMesh);
+  var ballShadow = makeShadow(0.85);
+
+  // visée
+  var aimGroup = new THREE.Group();
+  var aimRingGeo = new THREE.RingGeometry(0.5, 0.72, 40);
+  aimRingGeo.rotateX(-Math.PI / 2);
+  var aimDotGeo = new THREE.CircleGeometry(0.14, 20);
+  aimDotGeo.rotateX(-Math.PI / 2);
+  var aimMat = new THREE.MeshBasicMaterial({ color: 0xffc24a, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+  aimGroup.add(new THREE.Mesh(aimRingGeo, aimMat));
+  aimGroup.add(new THREE.Mesh(aimDotGeo, aimMat));
+  aimGroup.visible = false;
+  aimGroup.position.y = 0.045;
+  scene.add(aimGroup);
+  var lineGeo = new THREE.PlaneGeometry(1, 1);
+  lineGeo.rotateX(-Math.PI / 2);
+  lineGeo.translate(0, 0, 0.5);
+  var aimLine = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ color: 0xff9a2e, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+  aimLine.visible = false;
+  aimLine.position.y = 0.03;
+  scene.add(aimLine);
+
+  /* ---------- caméra ---------- */
+  var camAngle = 0;                              // angle de la caméra autour du plateau (chacun voit son pion en bas)
+  function resize() {
+    var w = app.clientWidth || 1, h = app.clientHeight || 1;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    var elev = 1.05;
+    var vf = camera.fov * Math.PI / 180;
+    var hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+    var dH = (R * 1.08) / Math.tan(hf / 2);
+    var dV = ((R * Math.sin(elev) + 1.4) / 0.8) / Math.tan(vf / 2);
+    var d = Math.max(dH, dV);
+    var dh = d * Math.cos(elev);
+    camBase.set(dh * Math.sin(camAngle), d * Math.sin(elev), dh * Math.cos(camAngle));
+  }
+  window.addEventListener('resize', resize);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(app);
+
+  /* ---------- outils ---------- */
+  var PCSS = ['#cf3346', '#4f8cff', '#3fae5f', '#a77be0'];
+  var np = 2;                                    // nombre de joueurs de la manche
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+  }
+  function cleanName(v, def) {
+    var s = (typeof v === 'string' ? v : '').replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯﻿]/g, '').replace(/\s+/g, ' ').trim().slice(0, 12);
+    return s || def;
+  }
+  function num(v, lo, hi, def) {
+    v = +v;
+    if (!isFinite(v)) return def;
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function noop() {}
+
+  /* ---------- réseau : état ---------- */
+  var rt = null, rtReady = false, busy = false;
+  var FIND_T = 8;                               // délai pour trouver l'hôte (connexion directe entre téléphones)
+  function makeNet() {
+    return {
+      mode: 'local', room: null, code: '', me: 0, myPeer: '', myName: '', phase: '', t: 0, sl: [], sig: '', unsub: [],
+      seq: 0, hv: [], rd: 0, winner: -1, myReady: false, rdyArr: [], resultUI: false, resultShown: false,
+      gin: [[0, 0], [0, 0], [0, 0], [0, 0]], aimSeen: [], absent: [0, 0, 0, 0], gone: [false, false, false, false],
+      pubAcc: 0, lastJson: '', started: false, gRd: -1, gOk: 0, aimK: 0, lastIn: '', inT: 0, slotT: 0, missT: 0,
+      seenHost: false, tries: 0, uiT: 0
+    };
+  }
+  var net = makeNet();
+
+  /* ---------- interface ---------- */
+  var scoresEl = document.getElementById('scores');
+  var labelEls = [document.getElementById('label-a'), document.getElementById('label-c')];
+  var pillEls = [], scoreEls = [], nameEls = [];
+
+  function tally(n) {
+    var out = '';
+    for (var g = 0; g < n; g += 5) {
+      out += '<span class="grp">';
+      for (var k = g; k < Math.min(n, g + 5); k++) out += '<i></i>';
+      out += '</span>';
+    }
+    return out;
+  }
+
+  function buildHUD() {
+    scoresEl.innerHTML = '';
+    scoresEl.className = 'scores' + (np > 2 ? ' many' : '');
+    pillEls = []; scoreEls = []; nameEls = [];
+    for (var i = 0; i < np; i++) {
+      var pill = document.createElement('div');
+      pill.className = 'pill';
+      pill.style.setProperty('--c', PCSS[i]);
+      var nm = document.createElement('span');
+      nm.className = 'nm';
+      var tl = document.createElement('span');
+      tl.className = 'tally';
+      pill.appendChild(nm);
+      pill.appendChild(tl);
+      scoresEl.appendChild(pill);
+      pillEls.push(pill); nameEls.push(nm); scoreEls.push(tl);
+    }
+    updateNames();
+    renderHUD();
+  }
+  function updateNames() {
+    for (var i = 0; i < nameEls.length; i++) nameEls[i].textContent = NAMES[i];
+    if (net.mode === 'local') {
+      labelEls[0].textContent = NAMES[0];
+      labelEls[1].textContent = NAMES[1];
+      zones[0].style.removeProperty('--c');
+    } else {
+      labelEls[0].textContent = NAMES[net.me];
+      zones[0].style.setProperty('--c', PCSS[net.me]);
+    }
+  }
+  function renderHUD() {
+    for (var i = 0; i < scoreEls.length; i++) scoreEls[i].innerHTML = tally(score[i]);
+  }
+
+  function setErr(msg) {
+    var e = document.getElementById('menu-err');
+    if (e) e.textContent = msg || '';
+  }
+  function refreshMenu() {
+    var c = document.getElementById('btn-create'), j = document.getElementById('btn-join');
+    if (!c || !j) return;
+    c.disabled = !rt; j.disabled = !rt;
+    if (rtReady && !rt) setErr("Mode en ligne indisponible ici. Ouvre le jeu depuis l'invitation, connecté à Claude.");
+  }
+
+  function showMenu(err) {
+    var saved = '';
+    try { saved = localStorage.getItem('bdf-name') || ''; } catch (e) {}
+    app.classList.add('intro');
+    overlay.hidden = false;
+    overlay.onclick = null;
+    card.className = 'card menu';
+    card.innerHTML =
+      '<h1>Boule de feu</h1>' +
+      '<input class="field" id="inp-name" maxlength="12" autocomplete="off" autocapitalize="words" placeholder="Ton nom" value="' + esc(saved) + '">' +
+      '<button class="go" id="btn-create" type="button">Créer une partie</button>' +
+      '<div class="row2"><input class="field" id="inp-code" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="Code" style="flex:1;min-width:0">' +
+      '<button class="ghost" id="btn-join" type="button">Rejoindre</button></div>' +
+      '<button class="ghost" id="btn-local" type="button">À deux sur ce téléphone</button>' +
+      '<p class="err" id="menu-err">' + esc(err || '') + '</p>';
+    function nameVal() {
+      var v = cleanName(document.getElementById('inp-name').value, 'Joueur');
+      try { localStorage.setItem('bdf-name', v); } catch (e) {}
+      return v;
+    }
+    document.getElementById('btn-create').addEventListener('click', function () {
+      if (!rt) return;
+      startOnline('h', genCode(), nameVal(), 0);
+    });
+    document.getElementById('btn-join').addEventListener('click', function () {
+      if (!rt) return;
+      var code = String(document.getElementById('inp-code').value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (code.length < 3) { setErr('Entre le code de la partie.'); return; }
+      startOnline('g', code, nameVal(), 0);
+    });
+    document.getElementById('btn-local').addEventListener('click', startLocal);
+    refreshMenu();
+  }
+
+  function lobbyCount() { return net.mode === 'host' ? 1 + net.sl.length : net.lobbyN; }
+  function renderLobby() {
+    var cnt = lobbyCount(), i, list = '';
+    app.classList.add('intro');
+    overlay.hidden = false;
+    overlay.onclick = null;
+    card.className = 'card menu';
+    for (i = 0; i < cnt; i++) list += '<li style="--c:' + PCSS[i] + '">' + esc(NAMES[i]) + (i === net.me ? ' (toi)' : '') + '</li>';
+    var h = '<h1>Boule de feu</h1>';
+    if (net.mode === 'host') {
+      h += '<p class="lead">Tes amis rejoignent avec ce code :</p><p class="code">' + esc(net.code.toUpperCase()) + '</p>';
+    } else {
+      h += '<p class="lead">Partie ' + esc(net.code.toUpperCase()) + ' : en attente du lancement…</p>';
+    }
+    h += '<ul class="plist">' + list + '</ul>';
+    if (net.mode === 'host') h += '<button class="go" id="btn-start" type="button"' + (cnt < 2 ? ' disabled' : '') + '>Lancer la partie</button>';
+    h += '<button class="ghost" id="btn-quit" type="button">Quitter</button>';
+    card.innerHTML = h;
+    var q = document.getElementById('btn-quit');
+    if (q) q.addEventListener('click', function () { toMenu(); });
+    var s = document.getElementById('btn-start');
+    if (s) s.addEventListener('click', hostStartGame);
+  }
+  function showWait(msg) {
+    app.classList.add('intro');
+    overlay.hidden = false;
+    card.className = 'card menu';
+    card.innerHTML = '<h1>Boule de feu</h1><p class="lead">' + esc(msg) + '</p><button class="ghost" id="btn-quit" type="button">Annuler</button>';
+    document.getElementById('btn-quit').addEventListener('click', function () { toMenu(); });
+  }
+
+  function showResult() {
+    var i, rows = '';
+    card.className = 'card';
+    for (i = 0; i < np; i++) {
+      rows += '<div class="row"><small style="color:' + PCSS[i] + '">' + esc(NAMES[i]) + '</small><span class="tally">' + tally(score[i]) + '</span><em class="rb"></em></div>';
+    }
+    var html = '<div class="board">' + rows + '</div>';
+    if (net.mode === 'local') {
+      html += '<div class="replay"><button class="go go-a" id="btn-a" type="button">' + esc(NAMES[0]) + '<span>Rejouer</span></button>' +
+        '<button class="go go-c" id="btn-c" type="button">' + esc(NAMES[1]) + '<span>Rejouer</span></button></div>';
+    } else {
+      html += '<button class="go" id="btn-rep" type="button">Rejouer</button><button class="ghost" id="btn-quit" type="button">Quitter</button>';
+    }
+    card.innerHTML = html;
+    overlay.hidden = false;
+    overlay.onclick = null;
+    if (net.mode === 'local') {
+      var ready = [false, false];
+      [['btn-a', 0], ['btn-c', 1]].forEach(function (b) {
+        var el = document.getElementById(b[0]);
+        el.addEventListener('click', function () {
+          if (ready[b[1]]) return;
+          ready[b[1]] = true;
+          el.classList.add('ready');
+          el.lastChild.textContent = 'Prêt';
+          if (ready[0] && ready[1]) nextRound();
+        });
+      });
+      return;
+    }
+    net.myReady = false;
+    net.resultUI = true;
+    net.resultShown = true;
+    var rep = document.getElementById('btn-rep');
+    rep.addEventListener('click', function () {
+      if (net.myReady) return;
+      net.myReady = true;
+      rep.classList.add('ready');
+      rep.textContent = 'Prêt';
+      if (net.mode === 'guest') net.room.presence({ rr: net.gRd }).catch(noop);
+      updateReadyUI();
+    });
+    document.getElementById('btn-quit').addEventListener('click', function () { toMenu(); });
+  }
+  function updateReadyUI() {
+    var els = card.querySelectorAll('.rb');
+    if (!els || !els.length) return;
+    for (var i = 0; i < np; i++) {
+      var r = i === net.me ? net.myReady : !!net.rdyArr[i];
+      var t = r ? 'Prêt' : '';
+      if (els[i] && els[i].textContent !== t) els[i].textContent = t;
+    }
+  }
+
+  /* ---------- manettes ---------- */
+  function makeStick(zoneId, who) {
+    var zone = document.getElementById(zoneId);
+    var base = zone.querySelector('.stick');
+    var knob = base.querySelector('i');
+    var id = null, cx = 0, cy = 0, MAXR = 48;
+    function update(e) {
+      var dx = e.clientX - cx, dy = e.clientY - cy;
+      var d = Math.hypot(dx, dy);
+      if (d > MAXR) { dx *= MAXR / d; dy *= MAXR / d; }
+      knob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+      var mx = dx / MAXR, my = dy / MAXR;
+      if (Math.hypot(mx, my) < 0.14) { mx = 0; my = 0; }
+      sticks[who].x = mx; sticks[who].y = my;
+    }
+    function end(e) {
+      if (e.pointerId !== id) return;
+      id = null;
+      base.classList.remove('on');
+      zone.classList.remove('active');
+      sticks[who].x = 0; sticks[who].y = 0;
+    }
+    zone.addEventListener('pointerdown', function (e) {
+      if (id !== null) return;
+      id = e.pointerId;
+      try { zone.setPointerCapture(id); } catch (err) {}
+      var r = zone.getBoundingClientRect();
+      cx = e.clientX; cy = e.clientY;
+      base.style.left = (cx - r.left) + 'px';
+      base.style.top = (cy - r.top) + 'px';
+      base.classList.add('on');
+      zone.classList.add('active');
+      update(e);
+      e.preventDefault();
+    });
+    zone.addEventListener('pointermove', function (e) { if (e.pointerId === id) update(e); });
+    zone.addEventListener('pointerup', end);
+    zone.addEventListener('pointercancel', end);
+    zone.addEventListener('lostpointercapture', end);
+  }
+  makeStick('zone-a', 0);
+  makeStick('zone-c', 1);
+
+  window.addEventListener('keydown', function (e) { keys[e.code] = true; });
+  window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+
+  // entrée du joueur de ce téléphone, exprimée dans le monde (la caméra peut être tournée)
+  function ownWorldInput() {
+    var x = sticks[0].x, y = sticks[0].y;
+    if (keys.KeyA || keys.ArrowLeft) x -= 1;
+    if (keys.KeyD || keys.ArrowRight) x += 1;
+    if (keys.KeyW || keys.ArrowUp) y -= 1;
+    if (keys.KeyS || keys.ArrowDown) y += 1;
+    var m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; }
+    var c = Math.cos(camAngle), s = Math.sin(camAngle);
+    return { x: x * c + y * s, y: -x * s + y * c };
+  }
+  function readInput(i) {
+    if (net.mode === 'host') {
+      if (i === 0) return ownWorldInput();
+      return { x: net.gin[i][0], y: net.gin[i][1] };
+    }
+    var x = sticks[i].x, y = sticks[i].y;
+    if (i === 0) {
+      if (keys.KeyA) x -= 1; if (keys.KeyD) x += 1; if (keys.KeyW) y -= 1; if (keys.KeyS) y += 1;
+    } else {
+      if (keys.ArrowLeft) x -= 1; if (keys.ArrowRight) x += 1; if (keys.ArrowUp) y -= 1; if (keys.ArrowDown) y += 1;
+    }
+    var m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; }
+    return { x: x, y: y };
+  }
+
+  /* ---------- visée au doigt ---------- */
+  var ray = new THREE.Raycaster();
+  var ndc = new THREE.Vector2();
+  var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  var hitV = new THREE.Vector3();
+  function pick(e) {
+    var r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    if (!ray.ray.intersectPlane(plane, hitV)) return null;
+    var d = Math.hypot(hitV.x, hitV.z), lim = R - 0.7;
+    var x = hitV.x, z = hitV.z;
+    if (d > lim) { x *= lim / d; z *= lim / d; }
+    return { x: x, z: z };
+  }
+  function setAim(e) {
+    var p = pick(e);
+    if (p) { aim.x = p.x; aim.z = p.z; }
+  }
+  function canAim() {
+    if (state !== 'aim') return false;
+    if (net.mode === 'local') return true;
+    return turn === net.me && !pawns[net.me].dead;
+  }
+  function tryLaunch(x, z) {
+    if (net.mode === 'guest') {
+      if (Math.hypot(x - ball.x, z - ball.z) < 1.2) return;
+      net.aimK++;
+      net.room.presence({ aim: [r2(x), r2(z), net.aimK] }).catch(noop);
+    } else {
+      launch(x, z);
+    }
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!canAim() || aim.id !== null) return;
+    aim.id = e.pointerId;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    setAim(e);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (e.pointerId === aim.id) setAim(e);
+  });
+  canvas.addEventListener('pointerup', function (e) {
+    if (e.pointerId !== aim.id) return;
+    setAim(e);
+    aim.id = null;
+    if (canAim()) tryLaunch(aim.x, aim.z);
+  });
+  canvas.addEventListener('pointercancel', function (e) {
+    if (e.pointerId === aim.id) aim.id = null;
+  });
+  app.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  /* ---------- règles ---------- */
+  function launch(tx, tz) {
+    var dx = tx - ball.x, dz = tz - ball.z;
+    if (Math.hypot(dx, dz) < 1.2) return;      // trop près : on ne consomme pas le tour
+    ball.tx = tx; ball.tz = tz;
+    ball.speed = BALL_BASE * Math.pow(BALL_GROWTH, launches);
+    ball.moving = true;
+    note = '';
+    state = 'fly';
+    renderHUD();
+  }
+
+  function nextAlive(from) {
+    var t = from;
+    for (var k = 0; k < np; k++) {
+      t = (t + 1) % np;
+      if (!pawns[t].dead) return t;
+    }
+    return from;
+  }
+  function arrive() {
+    ball.moving = false;
+    launches++;
+    turn = nextAlive(turn);
+    state = 'aim';
+    renderHUD();
+  }
+  function aliveInfo() {
+    var n = 0, last = -1;
+    for (var i = 0; i < np; i++) if (!pawns[i].dead) { n++; last = i; }
+    return { n: n, last: last };
+  }
+
+  // pion projeté : corps rigide qui culbute (animé dans frame)
+  function ragdoll(idx, pr) {
+    var p = pawns[idx];
+    p.dead = true;
+    p.hitT = 0;
+    p.x = pr.x; p.z = pr.z;
+    p.vx = pr.vx; p.vz = pr.vz; p.vy = pr.vy;
+    p.y = 0.65 * PAWN_SCALE;
+    p.wx = pr.wx; p.wy = pr.wy; p.wz = pr.wz;
+    p.pivot.position.y = 0;
+  }
+
+  // un joueur est touché : il est éliminé ; s'il n'en reste qu'un, il gagne la manche
+  function hit(idx) {
+    var p = pawns[idx];
+    if (p.dead) return;
+    var dx = p.x - ball.x, dz = p.z - ball.z, d = Math.hypot(dx, dz) || 1;
+    var sp = ball.moving ? Math.min(ball.speed, 30) : 0;
+    var kick = 4 + sp * 0.6;
+    var pr = {
+      x: p.x, z: p.z, vx: dx / d * kick, vz: dz / d * kick, vy: 4 + sp * 0.25,
+      wx: (Math.random() - 0.5) * 18, wy: (Math.random() - 0.5) * 8, wz: (Math.random() - 0.5) * 18
+    };
+    ragdoll(idx, pr);
+    net.seq++;
+    net.hv.push([net.seq, idx, r2(pr.x), r2(pr.z), r2(pr.vx), r2(pr.vz), r2(pr.vy), r2(pr.wx), r2(pr.wy), r2(pr.wz)]);
+    shake = 1;
+    var a = aliveInfo();
+    if (a.n <= 1) {
+      ball.moving = false;
+      if (a.n === 1) { score[a.last]++; net.winner = a.last; } else net.winner = -1;
+      aim.id = null;
+      state = 'over';
+      pendingOver = 1.0;
+      net.myReady = false;
+      net.resultShown = false;
+      renderHUD();
+    } else if (state === 'aim' && turn === idx) {
+      turn = nextAlive(idx);
+    }
+  }
+
+  function nextRound() {
+    overlay.hidden = true;
+    app.classList.remove('intro');
+    if (state !== 'intro') round++;
+    var r = R * 0.64;
+    for (var i = 0; i < MAXP; i++) {
+      var p = pawns[i];
+      var act = i < np;
+      p.gone = act && !!net.gone[i] && net.mode !== 'local';
+      p.group.visible = act && !p.gone;
+      p.shadow.visible = act && !p.gone;
+      p.dead = p.gone;
+      p.hitT = 0; p.vx = 0; p.vz = 0; p.y = 0; p.vy = 0;
+      if (!act) continue;
+      var th = i * 2 * Math.PI / np;
+      p.x = r * Math.sin(th); p.z = r * Math.cos(th);
+      p.tx = p.x; p.tz = p.z;
+      p.ry = Math.atan2(-p.x, -p.z);
+      p.group.scale.set(PAWN_SCALE, PAWN_SCALE, PAWN_SCALE);
+      p.group.rotation.set(0, p.ry, 0);
+      p.pivot.position.y = 0.65;
+      p.pivot.rotation.set(0, 0, 0);
+    }
+    ball.x = 0; ball.z = 0; ball.moving = false;
+    launches = 0;
+    turn = round % np;
+    if (pawns[turn].dead) turn = nextAlive(turn);
+    timer = TURN_TIME;
+    note = ''; noteT = 0;
+    pendingOver = -1;
+    acc = 0;
+    aim.id = null;
+    net.hv = [];
+    net.winner = -1;
+    net.myReady = false;
+    net.resultShown = false;
+    net.resultUI = false;
+    state = 'aim';
+    renderHUD();
+  }
+
+  function physicsStep(h) {
+    var i, j, p;
+    for (i = 0; i < np; i++) {
+      p = pawns[i];
+      if (p.dead) continue;
+      var inp = readInput(i);
+      p.vx = inp.x * PLAYER_SPEED;
+      p.vz = inp.y * PLAYER_SPEED;
+      p.x += p.vx * h;
+      p.z += p.vz * h;
+      var d = Math.hypot(p.x, p.z), lim = R - PAWN_R - 0.1;
+      if (d > lim) { p.x *= lim / d; p.z *= lim / d; }
+    }
+    for (i = 0; i < np; i++) {
+      for (j = i + 1; j < np; j++) {
+        var a = pawns[i], b = pawns[j];
+        if (a.dead || b.dead) continue;
+        var ddx = b.x - a.x, ddz = b.z - a.z, dd = Math.hypot(ddx, ddz), min = PAWN_R * 2;
+        if (dd < min && dd > 0.0001) {
+          var push = (min - dd) / 2;
+          a.x -= ddx / dd * push; a.z -= ddz / dd * push;
+          b.x += ddx / dd * push; b.z += ddz / dd * push;
+        }
+      }
+    }
+    if (ball.moving) {
+      var dx = ball.tx - ball.x, dz = ball.tz - ball.z, dist = Math.hypot(dx, dz);
+      var step = ball.speed * h;
+      if (step >= dist) { ball.x = ball.tx; ball.z = ball.tz; }
+      else { ball.x += dx / dist * step; ball.z += dz / dist * step; }
+    }
+    for (i = 0; i < np; i++) {
+      p = pawns[i];
+      if (!p.dead && Math.hypot(p.x - ball.x, p.z - ball.z) < HIT_DIST) {
+        hit(i);
+        if (state === 'over') return;
+      }
+    }
+    if (ball.moving && ball.x === ball.tx && ball.z === ball.tz) arrive();
+  }
+
+  // la vitesse n'a pas de limite : on découpe le mouvement pour ne jamais traverser un pion
+  function physics(h) {
+    var steps = ball.moving ? Math.min(240, Math.max(1, Math.ceil(ball.speed * h / 0.4))) : 1;
+    var hh = h / steps;
+    for (var sub = 0; sub < steps; sub++) {
+      physicsStep(hh);
+      if (state !== 'aim' && state !== 'fly') break;
+    }
+  }
+
+  /* ---------- modes de jeu ---------- */
+  function resetNames() { for (var i = 0; i < MAXP; i++) NAMES[i] = 'P' + (i + 1); }
+
+  function startLocal() {
+    net = makeNet();
+    np = 2; resetNames();
+    score = [0, 0, 0, 0]; round = 0; camAngle = 0;
+    app.classList.remove('online');
+    buildHUD();
+    resize();
+    state = 'intro';
+    nextRound();
+  }
+
+  function setupOnlineView() {
+    app.classList.add('online');
+    camAngle = net.me * 2 * Math.PI / np;
+    buildHUD();
+    resize();
+  }
+
+  function releaseRoom() {
+    var r = net.room, us = net.unsub || [];
+    us.forEach(function (u) { try { u(); } catch (e) {} });
+    if (r) { try { r.leave().catch(noop); } catch (e) {} }
+    net = makeNet();
+    busy = false;
+  }
+
+  function toMenu(err) {
+    releaseRoom();
+    np = 2; resetNames();
+    score = [0, 0, 0, 0]; round = 0; camAngle = 0;
+    app.classList.remove('online');
+    buildHUD();
+    resize();
+    state = 'intro';
+    nextRound();
+    state = 'intro';
+    pendingOver = -1;
+    showMenu(err);
+  }
+
+  function genCode() {
+    var al = 'abcdefghjkmnpqrstuvwxyz23456789', s = '';
+    for (var i = 0; i < 5; i++) s += al.charAt(Math.floor(Math.random() * al.length));
+    return s;
+  }
+
+  function others(role) {
+    var out = [];
+    if (!net.room) return out;
+    var ps = net.room.peers();
+    for (var i = 0; i < ps.length; i++) {
+      var p = ps[i];
+      if (!p.isMe && p.kind === 'viewer' && p.presence && p.presence.role === role) out.push(p);
+    }
+    return out;
+  }
+  function findMe() {
+    var ps = net.room.peers();
+    for (var i = 0; i < ps.length; i++) if (ps[i].isMe && ps[i].sameTab) return ps[i];
+    return null;
+  }
+
+  function onRoomErr() { if (net.room) toMenu('Connexion perdue.'); }
+
+  function startOnline(role, code, name, tries) {
+    if (busy || !rt) return;
+    busy = true;
+    showWait('Connexion au serveur… (la première fois, cela peut prendre une minute)');
+    var joined;
+    try { joined = rt.join('bdf-' + code, role); } catch (e) { joined = Promise.reject(e); }
+    joined.then(function (room) {
+      net = makeNet();
+      net.room = room; net.code = code; net.myName = name; net.tries = tries;
+      net.mode = role === 'h' ? 'host' : 'guest';
+      net.phase = role === 'h' ? 'check' : 'find';
+      net.lobbyN = 1;
+      resetNames();
+      NAMES[0] = name;
+      room.presence({ role: role, n: name }).catch(noop);
+      net.unsub = [room.onPeers(noop, onRoomErr)];
+    }).catch(function (err) {
+      busy = false;
+      if (role === 'h' && err && err.taken && tries < 3) { startOnline('h', genCode(), name, tries + 1); return; }
+      if (err && err.code === 'nohost') toMenu('Aucune partie avec ce code.');
+      else if (err && err.code === 'full') toMenu('Cette partie est complète.');
+      else if (err && err.code === 'config') toMenu("Serveur non configuré : ajoute ?s=wss://ton-serveur à l'adresse du jeu.");
+      else toMenu('Connexion impossible. Réessaie.');
+    });
+  }
+
+  /* ---------- hôte ---------- */
+  function hostStartGame() {
+    var cnt = 1 + net.sl.length;
+    if (net.mode !== 'host' || net.phase !== 'lobby' || cnt < 2) return;
+    net.phase = 'play';
+    np = cnt;
+    score = [0, 0, 0, 0]; round = 0;
+    net.rd++;
+    net.gone = [false, false, false, false];
+    net.absent = [0, 0, 0, 0];
+    net.aimSeen = [];
+    net.me = 0;
+    setupOnlineView();
+    state = 'intro';
+    nextRound();
+  }
+
+  function hostBackToLobby() {
+    net.phase = 'lobby';
+    net.sig = '';
+    net.sl = [];
+    np = 2; score = [0, 0, 0, 0]; round = 0; camAngle = 0;
+    app.classList.remove('online');
+    buildHUD();
+    resize();
+    state = 'intro';
+    nextRound();
+    state = 'intro';
+    pendingOver = -1;
+    net.rd++;
+    net.hv = [];
+    net.gone = [false, false, false, false];
+  }
+
+  function hostSnap() {
+    var play = net.phase === 'play', i;
+    var ps = [], rdy = [], dm = 0, gn = 0;
+    if (play) {
+      for (i = 0; i < np; i++) {
+        var p = pawns[i];
+        ps.push([r2(p.x), r2(p.z), r2(p.vx), r2(p.vz)]);
+        if (p.dead) dm |= (1 << i);
+        if (net.gone[i]) gn |= (1 << i);
+        rdy.push(i === 0 ? (net.myReady ? 1 : 0) : (net.rdyArr[i] ? 1 : 0));
+      }
+    }
+    var cnt = play ? np : 1 + net.sl.length;
+    return {
+      role: 'h', n: NAMES[0], ph: play ? 1 : 0, sl: net.sl.slice(), nm: NAMES.slice(0, cnt), np: np,
+      st: !play ? 'w' : state === 'fly' ? 'f' : state === 'over' ? 'o' : 'a',
+      t: turn, l: launches, sc: score.slice(0, np), rd: net.rd, hv: net.hv, dm: dm, gn: gn, w: net.winner, rdy: rdy, p: ps,
+      b: [r2(ball.x), r2(ball.z), r2(ball.tx), r2(ball.tz), r2(ball.speed), ball.moving ? 1 : 0]
+    };
+  }
+
+  function hostTick(dt) {
+    var gs = others('g'), byPeer = {}, i;
+    for (i = 0; i < gs.length; i++) byPeer[gs[i].peer] = gs[i];
+
+    if (net.phase === 'check') {
+      net.t += dt;
+      if (net.t < 1.2) return;
+      if (others('h').length) {                  // code déjà pris : on en tire un autre
+        var nm = net.myName, tr = net.tries;
+        releaseRoom();
+        if (tr < 3) startOnline('h', genCode(), nm, tr + 1);
+        else toMenu('Impossible de créer la partie.');
+        return;
+      }
+      net.phase = 'lobby';
+      busy = false;
+    }
+
+    if (net.phase === 'lobby') {
+      net.sl = net.sl.filter(function (id) { return byPeer[id]; });
+      for (i = 0; i < gs.length; i++) {
+        if (net.sl.indexOf(gs[i].peer) < 0 && net.sl.length < MAXP - 1) net.sl.push(gs[i].peer);
+      }
+      for (i = 0; i < MAXP; i++) {
+        if (i === 0) NAMES[0] = net.myName;
+        else if (i <= net.sl.length) NAMES[i] = cleanName(byPeer[net.sl[i - 1]].presence.n, 'P' + (i + 1));
+        else NAMES[i] = 'P' + (i + 1);
+      }
+      var sig = NAMES.slice(0, 1 + net.sl.length).join('|');
+      if (sig !== net.sig) { net.sig = sig; renderLobby(); }
+    } else if (net.phase === 'play') {
+      var left = 0;
+      net.rdyArr = [net.myReady];
+      for (i = 1; i < np; i++) {
+        var pe = byPeer[net.sl[i - 1]];
+        if (!pe) {
+          net.absent[i] += dt;
+          if (net.absent[i] > 3 && !net.gone[i]) {
+            net.gone[i] = true;
+            if (!pawns[i].dead && (state === 'aim' || state === 'fly')) hit(i);
+          }
+        } else {
+          net.absent[i] = 0;
+          var pr = pe.presence, gx = 0, gy = 0, a = pr.in;
+          if (Array.isArray(a)) {
+            gx = num(a[0], -1, 1, 0); gy = num(a[1], -1, 1, 0);
+            var m = Math.hypot(gx, gy);
+            if (m > 1) { gx /= m; gy /= m; }
+          }
+          net.gin[i] = [gx, gy];
+          var ai = pr.aim;
+          if (Array.isArray(ai) && ai[2] !== net.aimSeen[i]) {
+            net.aimSeen[i] = ai[2];
+            if (state === 'aim' && turn === i && !pawns[i].dead) {
+              var ax = num(ai[0], -R, R, 0), az = num(ai[1], -R, R, 0), ad = Math.hypot(ax, az), lim = R - 0.7;
+              if (ad > lim) { ax *= lim / ad; az *= lim / ad; }
+              launch(ax, az);
+            }
+          }
+        }
+        if (!net.gone[i]) left++;
+        net.rdyArr[i] = net.gone[i] || (!!pe && pe.presence.rr === net.rd);
+      }
+      if (left === 0) { hostBackToLobby(); renderLobby(); return; }
+      if (state === 'over' && net.resultShown && net.myReady) {
+        var all = true;
+        for (i = 1; i < np; i++) if (!net.rdyArr[i]) all = false;
+        if (all) { net.rd++; nextRound(); }
+      }
+      if (net.resultUI) updateReadyUI();
+    }
+
+    net.pubAcc += dt;
+    if (net.pubAcc >= 0.066) {
+      net.pubAcc = 0;
+      var snap = hostSnap(), j = JSON.stringify(snap);
+      if (j !== net.lastJson) {
+        net.lastJson = j;
+        net.room.presence(snap).catch(noop);
+      }
+    }
+  }
+
+  /* ---------- invité ---------- */
+  function guestTick(dt) {
+    var hs = others('h'), i;
+    if (!hs.length) {
+      net.missT += dt;
+      if (!net.seenHost) { if (net.missT > FIND_T) toMenu('Aucune partie avec ce code.'); }
+      else if (net.missT > 4) toMenu("L'hôte a quitté la partie.");
+      return;
+    }
+    net.missT = 0;
+    net.seenHost = true;
+    var s = hs[0].presence;
+    if (!net.myPeer) {
+      var me = findMe();
+      if (!me) return;
+      net.myPeer = me.peer;
+    }
+    var sl = Array.isArray(s.sl) ? s.sl : [];
+    var idx = sl.indexOf(net.myPeer);
+    if (idx < 0) {
+      net.slotT += dt;
+      if (s.ph && net.slotT > 1.5) toMenu('Cette partie a déjà commencé.');
+      else if (!s.ph && sl.length >= MAXP - 1 && net.slotT > 1.5) toMenu('Cette partie est complète.');
+      return;
+    }
+    net.slotT = 0;
+    net.me = idx + 1;
+    var nm = Array.isArray(s.nm) ? s.nm : [];
+    for (i = 0; i < MAXP; i++) NAMES[i] = cleanName(nm[i], 'P' + (i + 1));
+    if (!s.ph) {
+      if (net.started) {                         // retour au salon
+        net.started = false;
+        np = 2; score = [0, 0, 0, 0]; camAngle = 0;
+        app.classList.remove('online');
+        buildHUD();
+        resize();
+        state = 'intro';
+        nextRound();
+        state = 'intro';
+        pendingOver = -1;
+        net.sig = '';
+      }
+      net.lobbyN = Math.min(MAXP, Math.max(1, nm.length));
+      var sig = NAMES.slice(0, net.lobbyN).join('|') + '#' + net.me;
+      if (sig !== net.sig) { net.sig = sig; renderLobby(); }
+      return;
+    }
+    applySnap(s);
+    if (net.started) {
+      sendInput(dt);
+      if (net.resultUI) updateReadyUI();
+    }
+  }
+
+  function applySnap(s) {
+    var n = num(s.np, 2, MAXP, 2) | 0, i;
+    if (!Array.isArray(s.p) || s.p.length < n || !Array.isArray(s.sc) || !Array.isArray(s.b)) return;
+    var fresh = false;
+    if (!net.started) {
+      net.started = true;
+      np = n;
+      net.gRd = -1;
+      setupOnlineView();
+    }
+    if (s.rd !== net.gRd) {                      // nouvelle manche
+      net.gRd = s.rd;
+      fresh = true;
+      for (i = 0; i < MAXP; i++) net.gone[i] = !!(((s.gn | 0) >> i) & 1);
+      for (i = 0; i < np; i++) score[i] = num(s.sc[i], 0, 9999, 0);
+      state = 'intro';
+      nextRound();
+    }
+    turn = num(s.t, 0, np - 1, 0) | 0;
+    launches = num(s.l, 0, 1e6, 0) | 0;
+    var changed = false;
+    for (i = 0; i < np; i++) {
+      var v = num(s.sc[i], 0, 9999, 0);
+      if (score[i] !== v) { score[i] = v; changed = true; }
+    }
+    if (changed) renderHUD();
+    // pions touchés (événements numérotés, chacun joué une seule fois)
+    var hv = Array.isArray(s.hv) ? s.hv : [];
+    for (i = 0; i < hv.length; i++) {
+      var e = hv[i];
+      if (!Array.isArray(e) || !(e[0] > net.gOk)) continue;
+      net.gOk = e[0];
+      var idx = num(e[1], 0, np - 1, 0) | 0;
+      if (!pawns[idx].dead) {
+        ragdoll(idx, {
+          x: num(e[2], -R * 2, R * 2, 0), z: num(e[3], -R * 2, R * 2, 0), vx: num(e[4], -80, 80, 0), vz: num(e[5], -80, 80, 0),
+          vy: num(e[6], -80, 80, 4), wx: num(e[7], -40, 40, 0), wy: num(e[8], -40, 40, 0), wz: num(e[9], -40, 40, 0)
+        });
+        shake = 1;
+      }
+    }
+    var dm = s.dm | 0;
+    for (i = 0; i < np; i++) {
+      if (((dm >> i) & 1) && !pawns[i].dead) ragdoll(i, { x: pawns[i].x, z: pawns[i].z, vx: 0, vz: 0, vy: 4, wx: 3, wy: 1, wz: 3 });
+    }
+    if (s.st === 'o') {
+      if (state !== 'over') { state = 'over'; ball.moving = false; aim.id = null; pendingOver = 1.0; net.myReady = false; }
+    } else if (state === 'aim' || state === 'fly') {
+      state = s.st === 'f' ? 'fly' : 'aim';
+    }
+    for (i = 0; i < np; i++) {
+      var p = pawns[i], q = s.p[i];
+      if (!Array.isArray(q) || p.dead) continue;
+      p.tx = num(q[0], -R, R, 0); p.tz = num(q[1], -R, R, 0);
+      p.vx = num(q[2], -40, 40, 0); p.vz = num(q[3], -40, 40, 0);
+      if (fresh) { p.x = p.tx; p.z = p.tz; }
+    }
+    var b = s.b;
+    ball.x = num(b[0], -40, 40, 0); ball.z = num(b[1], -40, 40, 0);
+    ball.tx = num(b[2], -40, 40, 0); ball.tz = num(b[3], -40, 40, 0);
+    ball.speed = num(b[4], 0, 1e9, BALL_BASE);
+    ball.moving = !!b[5] && state !== 'over';
+    net.rdyArr = Array.isArray(s.rdy) ? s.rdy : [];
+  }
+
+  function guestStep(dt) {
+    if (!net.started) return;
+    var k = Math.min(1, dt * 18), i;
+    for (i = 0; i < np; i++) {
+      var p = pawns[i];
+      if (p.dead) continue;
+      p.x += (p.tx - p.x) * k;
+      p.z += (p.tz - p.z) * k;
+    }
+    if (ball.moving) {
+      var dx = ball.tx - ball.x, dz = ball.tz - ball.z, dist = Math.hypot(dx, dz), step = ball.speed * dt;
+      if (step >= dist) { ball.x = ball.tx; ball.z = ball.tz; }
+      else { ball.x += dx / dist * step; ball.z += dz / dist * step; }
+    }
+  }
+
+  function sendInput(dt) {
+    net.inT += dt;
+    var w = ownWorldInput();
+    if (state === 'over' || pawns[net.me].dead) { w.x = 0; w.y = 0; }
+    var key = r2(w.x) + ',' + r2(w.y);
+    if (key !== net.lastIn && net.inT >= 0.08) {
+      net.lastIn = key;
+      net.inT = 0;
+      net.room.presence({ 'in': [r2(w.x), r2(w.y)] }).catch(noop);
+    }
+  }
+
+  /* ---------- boucle ---------- */
+  function lerpAngle(a, b, t) {
+    var d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    return a + d * t;
+  }
+
+  // petite flèche dorée au-dessus du pion qui doit lancer la tour
+  var arrowGeo = new THREE.ConeGeometry(0.34, 0.7, 4);
+  arrowGeo.rotateX(Math.PI);
+  var arrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: 0xffc24a }));
+  arrow.visible = false;
+  scene.add(arrow);
+
+  var last = performance.now(), trailAcc = 0;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (!(dt > 0)) dt = 0.016;
+    time += dt;
+
+    if (net.mode !== 'local') netTick(dt);
+
+    if (net.mode === 'guest') {
+      guestStep(dt);
+    } else if (state === 'aim' || state === 'fly') {
+      acc += dt;
+      var H = 1 / 120;
+      while (acc >= H) {
+        physics(H);
+        acc -= H;
+        if (state === 'over') { acc = 0; break; }
+      }
+    }
+
+    if (pendingOver > 0) {
+      pendingOver -= dt;
+      if (pendingOver <= 0) showResult();
+    }
+
+    // tour
+    var by = 0.6 + Math.sin(time * 4) * (ball.moving ? 0.02 : 0.06);
+    ballMesh.position.set(ball.x, by - 0.55, ball.z);
+    ballMesh.rotation.y += dt * (ball.moving ? ball.speed / BALL_R : 0);
+    ballShadow.position.set(ball.x, 0.02, ball.z);
+
+    // pions
+    for (var i = 0; i < np; i++) {
+      var p = pawns[i];
+      if (p.gone) continue;
+      if (!p.dead) {
+        var mv = Math.hypot(p.vx, p.vz);
+        var ty = mv > 0.3 ? Math.atan2(p.vx, p.vz) : Math.atan2(ball.x - p.x, ball.z - p.z);
+        p.ry = lerpAngle(p.ry, ty, Math.min(1, dt * (mv > 0.3 ? 14 : 5)));
+        if (mv > 0.3) p.bob += dt * 16;
+        var sq = mv > 0.3 ? Math.sin(p.bob) * 0.06 : 0;
+        p.group.position.set(p.x, 0, p.z);
+        p.group.rotation.set(0, p.ry, 0);
+        p.group.scale.set((1 - sq * 0.5) * PAWN_SCALE, (1 + sq) * PAWN_SCALE, (1 - sq * 0.5) * PAWN_SCALE);
+        p.shadow.scale.setScalar(0.75 * PAWN_SCALE);
+      } else {
+        p.hitT += dt;
+        var onBoard = Math.hypot(p.x, p.z) < RB;
+        p.vy -= 22 * dt;
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+        p.y += p.vy * dt;
+        var floorY = 0.55;
+        if (onBoard && p.y < floorY) {
+          p.y = floorY;
+          if (p.vy < 0) p.vy = -p.vy * 0.42;
+          if (Math.abs(p.vy) < 1) p.vy = 0;
+          var fr = Math.max(0, 1 - 3.2 * dt);
+          p.vx *= fr; p.vz *= fr;
+          var ar = Math.max(0, 1 - 2.2 * dt);
+          p.wx *= ar; p.wy *= ar; p.wz *= ar;
+        }
+        p.pivot.rotation.x += p.wx * dt;
+        p.pivot.rotation.y += p.wy * dt;
+        p.pivot.rotation.z += p.wz * dt;
+        p.group.position.set(p.x, p.y, p.z);
+        p.group.scale.set(PAWN_SCALE, PAWN_SCALE, PAWN_SCALE);
+        p.group.visible = p.y > -12;
+        p.shadow.visible = onBoard;
+        p.shadow.scale.setScalar(0.75 * PAWN_SCALE / (1 + Math.max(0, p.y - floorY) * 0.35));
+      }
+      p.shadow.position.set(p.x, 0.02, p.z);
+    }
+
+    var ap = state === 'aim' && pawns[turn] && !pawns[turn].dead ? pawns[turn] : null;
+    arrow.visible = !!ap;
+    if (ap) {
+      arrow.position.set(ap.x, 2.7 + Math.sin(time * 5) * 0.15, ap.z);
+      arrow.rotation.y = time * 2;
+    }
+
+    // le pion qui doit jouer est légèrement brillant
+    for (var gi = 0; gi < np; gi++) {
+      var act = (state === 'aim' && turn === gi && !pawns[gi].dead);
+      pawns[gi].mat.emissive.setHex(COLORS[gi]);
+      pawns[gi].mat.emissiveIntensity = act ? 0.5 : 0;
+      pawns[gi].mat.roughness = act ? 0.18 : 0.45;
+    }
+
+    if (shake > 0.001) {
+      camera.position.set(camBase.x + (Math.random() - 0.5) * shake * 0.6, camBase.y + (Math.random() - 0.5) * shake * 0.6, camBase.z);
+      shake *= Math.pow(0.02, dt);
+    } else {
+      camera.position.copy(camBase);
+    }
+    camera.lookAt(lookV);
+    renderer.render(scene, camera);
+  }
+  function netTick(dt) {
+    if (!net.room) return;
+    if (net.mode === 'host') hostTick(dt); else guestTick(dt);
+  }
+
+  /* ---------- démarrage ---------- */
+  /* ---------- connexion via un petit serveur relais (WebSocket) ----------
+     L'hôte et ses invités se connectent au serveur, qui transmet leurs messages.
+     Cette couche imite l'interface « salle » : presence(), peers(), leave(). */
+  var RELAY_URL = 'wss://REMPLACE-MOI.onrender.com';
+  try {
+    var qs = /[?&]s=([^&]+)/.exec(location.search);
+    if (qs) RELAY_URL = decodeURIComponent(qs[1]);
+  } catch (e) {}
+  function makeRelay() {
+    return {
+      join: function (name, role) {
+        return new Promise(function (resolve, reject) {
+          if (/REMPLACE-MOI/.test(RELAY_URL) || typeof WebSocket === 'undefined') { var ec = new Error('config'); ec.code = 'config'; reject(ec); return; }
+          var code = name.replace(/^bdf-/, ''), ws, settled = false, closed = false, errCb = null;
+          var own = {}, tbl = {}, ids = {}, hostPres = {}, hostHere = false, myId = role === 'h' ? 'host' : 'moi';
+          try { ws = new WebSocket(RELAY_URL); } catch (e) { reject(e); return; }
+          var tm = setTimeout(function () { fail('timeout'); try { ws.close(); } catch (e) {} }, 70000);
+          function fail(c) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(tm);
+            var er = new Error('relay'); er.code = c; er.taken = c === 'taken';
+            reject(er);
+          }
+          function merge(dst, patch) {
+            if (!patch || typeof patch !== 'object') return;
+            var n = 0;
+            for (var k in patch) { if (n++ > 64) break; dst[k] = patch[k]; }
+          }
+          function send(m) { try { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } catch (e) {} }
+          var room = {
+            presence: function (patch) { merge(own, patch); send({ t: 'pr', pr: patch }); return Promise.resolve(); },
+            peers: function () {
+              var out = [{ peer: myId, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence: own }];
+              if (role === 'h') {
+                for (var id in ids) out.push({ peer: id, isMe: false, sameTab: false, kind: 'viewer', guest: false, presence: tbl[id] || {} });
+              } else if (hostHere) {
+                out.push({ peer: 'host', isMe: false, sameTab: false, kind: 'viewer', guest: false, presence: hostPres });
+              }
+              return out;
+            },
+            onPeers: function (h, onErr) { errCb = onErr || null; return noop; },
+            connected: function () { return ws.readyState === 1; },
+            onConnection: function () { return noop; },
+            leave: function () { closed = true; try { ws.close(); } catch (e) {} return Promise.resolve(); }
+          };
+          ws.onopen = function () { send({ t: 'join', room: code, role: role }); };
+          ws.onmessage = function (ev) {
+            var m;
+            try { m = JSON.parse(ev.data); } catch (e) { return; }
+            if (!m) return;
+            if (m.t === 'ok') {
+              if (settled) return;
+              settled = true; clearTimeout(tm);
+              if (m.id) myId = m.id;
+              if (role === 'g') { hostHere = true; merge(hostPres, m.pr); }
+              resolve(room);
+            } else if (m.t === 'err') { fail(m.code || 'bad'); }
+            else if (m.t === 'pr') { merge(hostPres, m.pr); }
+            else if (m.t === 'join') { ids[m.id] = true; tbl[m.id] = {}; }
+            else if (m.t === 'g') { if (!ids[m.id]) { ids[m.id] = true; tbl[m.id] = {}; } merge(tbl[m.id], m.pr); }
+            else if (m.t === 'leave') { delete ids[m.id]; delete tbl[m.id]; }
+            else if (m.t === 'hostleft') { hostHere = false; closed = true; }
+          };
+          ws.onclose = function () {
+            clearTimeout(tm);
+            if (!settled) { fail('closed'); return; }
+            if (!closed && errCb) { var f = errCb; errCb = null; f({ code: 'upstream_error' }); }
+          };
+          ws.onerror = function () {};
+        });
+      }
+    };
+  }
+  rt = makeRelay();
+  rtReady = true;
+
+  if (window.__bdfDump) window.__bdfDump(function () {
+    return {
+      state: state, turn: turn, np: np, score: score.slice(0, np), mode: net.mode, me: net.me, phase: net.phase, code: net.code,
+      names: NAMES.slice(), dead: pawns.map(function (p) { return !!p.dead; }), ball: [ball.x, ball.z, ball.moving, ball.speed],
+      pawns: pawns.map(function (p) { return [p.x, p.z]; }), card: card.innerHTML, rd: net.rd, started: net.started, camAngle: camAngle
+    };
+  });
+
+  resize();
+  resetNames();
+  buildHUD();
+  nextRound();
+  state = 'intro';
+  showMenu();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
